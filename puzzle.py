@@ -210,4 +210,3 @@ def main(stdscr):
 wrapper(main)
 #main()
 
-
