@@ -9,6 +9,7 @@ from random import randint
 def game(p):
     movements = 0
     stdscr = curses.initscr()
+    game.a = stdscr
     curses.noecho()
     stdscr.keypad(True)
     character = None
@@ -32,7 +33,7 @@ def game(p):
             print("\rDigite a velocidade de resolução em milisegundos:\r")
             curses.echo()
             speed = stdscr.getstr(0,0,5)
-            stdscr.clear()
+            #stdscr.clear()
             curses.noecho()
             result = []
             if (character == 'm'):
@@ -61,14 +62,34 @@ def game(p):
     curses.echo()
     curses.endwin()
     exit()
-    
+
+class node(object):
+    def __init__(self, val):
+        self.val = val
+        self.sons = []
+        self.father = None
+class tree(object):
+    def __init__(self, root):
+        self.root = root
+    def leafs(self, node):
+        if len(node.sons) == 0:
+            return [node]
+        else:
+            leaf = []
+            for n in node.sons:
+                for l in self.leafs(n):
+                    leaf.append(l)
+            return leaf
+
 class solve(object):
     def __init__(self):
         self.dictionary = {0:"KEY_RIGHT", 1:"KEY_LEFT", 2:"KEY_UP", 3:"KEY_DOWN"}
+        self.dictionaryReversed = {0:"KEY_LEFT", 1:"KEY_RIGHT",2:"KEY_DOWN",3:"KEY_UP"} 
         self.log = []
 
        ###heuristicas
-    def manhattanDistance(self,p):
+    def manhattanDistance(self,po):
+        p = copy.deepcopy(po)
         count = 0
         val = [0,0,0] #(valor, x, y)
         coordInit = []
@@ -88,7 +109,7 @@ class solve(object):
                 if i[0] == str(c[0]):
                     count += ((i[1]-c[1]).__abs__() + (i[2]-c[2]).__abs__())
         return count
-
+    
     def outOfPlace(self,p):
         count = 0
         val = 1
@@ -104,7 +125,7 @@ class solve(object):
     def nextLevelTree(self, p):
         pList = [(copy.deepcopy(p),0),(copy.deepcopy(p),1),(copy.deepcopy(p),2),(copy.deepcopy(p),3)]
         for i in range(0,4):
-            pList[i][0].move(self.dictionary[i])
+            pList[i][0].move(self.dictionary[pList[i][1]])
         keys = []
         for e in pList:
             adder = True
@@ -119,40 +140,44 @@ class solve(object):
         for idx, l in enumerate(self.log):
             if l[0].scene == p.scene:
                 return idx 
-        return -1
+        return -1 
 
-    def greedyStep(self, p, hFunc):
-        aux = self.containsLog(p)
-        if aux == -1:
-            self.log.append((p,0))
-        else:
-            self.log[aux] = (self.log[aux][0],self.log[aux][1]+1)
-            
-        if (p.win()):
-            return None
-        nextLevel = self.nextLevelTree(p)
-        heuristicCost = []
-        for i in nextLevel:
-            heuristicCost.append([i[0],i[1],hFunc(i[0])]) # (lista [puzzle, movimento, custoHeuristica])
-        heuristicCost.sort(key=lambda x: x[2], reverse=False) #ordena
-        returnMember = []
-        for idx, h in enumerate(heuristicCost):
-            aux = self.containsLog(h[0])
-            if aux != -1:
-                returnMember.append((idx,h[2],self.log[aux][1]))
-                continue
-            return h
-        returnMember.sort(key=lambda x: (x[1],x[2]), reverse=False)
-        if (returnMember[0][2] > 4):     
-            returnMember.sort(key=lambda x: (x[2]), reverse=False)
-        return heuristicCost[returnMember[0][0]] #retorna o puzzle para o proximo step
-       
-    def greedy(self, p, hfunc):
-        ret = self.greedyStep(p, hfunc) 
+    def greedy(self, p, hFunc):
+        Gtree = tree(node((p,None,hFunc(p)))) #tupla puzzle, None, heuristica na arvore
+        pointer = Gtree.root
         movements = []
-        while (ret is not None):
-            movements.append(ret[1])
-            ret = self.greedyStep(ret[0], hfunc)
+        while (pointer.val[0].win() is not True):
+            aux = self.containsLog(pointer.val[0])
+            if aux == -1:
+                self.log.append((copy.deepcopy(pointer.val[0]),0))
+            else:
+                self.log[aux] = (self.log[aux][0],self.log[aux][1]+1)
+            nextLevel = self.nextLevelTree(pointer.val[0]) 
+            heuristicCost = []
+            for i in nextLevel:
+                n = node([i[0], i[1], hFunc(i[0])])
+                n.father = pointer
+                heuristicCost.append(n)
+
+            pointer.sons = heuristicCost
+            leaf = Gtree.leafs(Gtree.root)
+            leaf.sort(key=lambda x: x.val[2], reverse=False)
+            verif = True
+            returnMember = []
+            for j in leaf:
+                aux = self.containsLog(j.val[0])
+                if aux == -1:
+                    pointer = j
+                    verif = False
+                    break
+                else:
+                    returnMember.append((j,self.log[aux][1]))
+            if verif == True:
+                returnMember.sort(key=lambda x: x[1], reverse=False)
+                pointer = returnMember[0][0]
+        while pointer.val[0].scene != p.scene:
+            movements.insert(0,pointer.val[1])
+            pointer = pointer.father
         return movements
         
 class puzzle(object):
