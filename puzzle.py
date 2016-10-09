@@ -1,4 +1,5 @@
 #Autor WaGjUb => (Daniel Costa Valerio)
+import os
 import pdb
 import copy
 import curses
@@ -7,12 +8,30 @@ from curses import wrapper
 from random import randint
 
 def game(p):
+    tick = "OFF"
     movements = 0
     stdscr = curses.initscr()
     game.a = stdscr
     curses.noecho()
     stdscr.keypad(True)
     character = None
+    print("Digite [s/n] para guardar as estatisticas ou e para apenas gerar estatisticas:\r")
+    character = stdscr.getkey()
+    if character == "s":
+        tick = "ON"
+    elif character == 'e':  
+        tick = 'ON'
+        p.initial()
+        for i in range(0,3):
+            solve().aStarAndGreedy(p,solve().manhattanDistance, tick, True)
+            solve().aStarAndGreedy(p,solve().manhattanDistance, tick)
+            solve().aStarAndGreedy(p,solve().outOfPlace, tick, True)
+            solve().aStarAndGreedy(p,solve().outOfPlace, tick)
+            p.shuffle()
+        print('\rEstatisticas geradas!')
+        stdscr.getkey()
+        exit()
+    stdscr.clear()
     while (True):
         stdscr.clear()
         stdscr.refresh()
@@ -27,7 +46,12 @@ def game(p):
         elif (character == 'i'):
             p.initial()
             movements = 0
-        elif(character == 'g'):
+        elif(character == 'g' or character == 'a'):
+            aStar = None
+            if character == 'a':
+                aStar = True
+            else:
+                aStar = False
             print("\rSelecione a heurística: m para manhattan e f para fora do lugar: \r")
             character = stdscr.getkey()
             print("\rDigite a velocidade de resolução em milisegundos:\r")
@@ -37,9 +61,9 @@ def game(p):
             curses.noecho()
             result = []
             if (character == 'm'):
-                result = solve().greedy(p,solve().manhattanDistance)
+                result = solve().aStarAndGreedy(p,solve().manhattanDistance,tick, aStar)
             elif (character == 'f'):
-                result = solve().greedy(p,solve().outOfPlace)
+                result = solve().aStarAndGreedy(p,solve().outOfPlace, tick, aStar)
             dictionary = {0:"KEY_RIGHT", 1:"KEY_LEFT", 2:"KEY_UP", 3:"KEY_DOWN"}
             movements = len(result)
             while len(result) > 0:
@@ -68,9 +92,11 @@ class node(object):
         self.val = val
         self.sons = []
         self.father = None
+        self.myLevel = None
 class tree(object):
     def __init__(self, root):
         self.root = root
+        root.myLevel = 0
     def leafs(self, node):
         if len(node.sons) == 0:
             return [node]
@@ -80,6 +106,21 @@ class tree(object):
                 for l in self.leafs(n):
                     leaf.append(l)
             return leaf
+    def nodesQnt(self, node):
+        if len(node.sons) == 0:
+            return 1
+        else:
+            count = 1
+            for n in node.sons:
+                count += self.nodesQnt(n)
+            return count
+    def fatherRouteQnt(self, node):
+        
+        if node is self.root:
+            return 1
+        else:
+            count = 1 + self.fatherRouteQnt(node.father)
+            return count
 
 class solve(object):
     def __init__(self):
@@ -89,6 +130,7 @@ class solve(object):
 
        ###heuristicas
     def manhattanDistance(self,po):
+        solve.manhattanDistance.nome = "Distância de Manhattan"
         p = copy.deepcopy(po)
         count = 0
         val = [0,0,0] #(valor, x, y)
@@ -111,6 +153,7 @@ class solve(object):
         return count
     
     def outOfPlace(self,p):
+        solve.outOfPlace.nome = "Peças fora do lugar"
         count = 0
         val = 1
         for i in range(0,3):
@@ -137,16 +180,25 @@ class solve(object):
         return keys #retorna tuplas (puzzle, movimento)
 
     def containsLog(self,p):
+
+        print("\rNós no log: {0}".format(len(self.log)),end="")
         for idx, l in enumerate(self.log):
             if l[0].scene == p.scene:
                 return idx 
         return -1 
-
-    def greedy(self, p, hFunc):
+    
+    def aStarAndGreedy(self, p, hFunc, tick, aStar=False):
         Gtree = tree(node((p,None,hFunc(p)))) #tupla puzzle, None, heuristica na arvore
         pointer = Gtree.root
         movements = []
+        estatistic = []
+        iteration = 0
+        #for a star algorithm
+        gHeuristic = 0 
         while (pointer.val[0].win() is not True):
+            if tick == 'ON':
+                estatistic.append((iteration, Gtree.nodesQnt(Gtree.root), Gtree.fatherRouteQnt(pointer)))
+                iteration += 1
             aux = self.containsLog(pointer.val[0])
             if aux == -1:
                 self.log.append((copy.deepcopy(pointer.val[0]),0))
@@ -155,8 +207,12 @@ class solve(object):
             nextLevel = self.nextLevelTree(pointer.val[0]) 
             heuristicCost = []
             for i in nextLevel:
-                n = node([i[0], i[1], hFunc(i[0])])
+                if aStar:
+                    n = node([i[0], i[1], hFunc(i[0]) + (pointer.myLevel + 1)])
+                else:
+                    n = node([i[0], i[1], hFunc(i[0])])
                 n.father = pointer
+                n.myLevel = n.father.myLevel + 1 #gambs 
                 heuristicCost.append(n)
 
             pointer.sons = heuristicCost
@@ -175,17 +231,45 @@ class solve(object):
             if verif == True:
                 returnMember.sort(key=lambda x: x[1], reverse=False)
                 pointer = returnMember[0][0]
+        if tick == 'ON':
+            estatistic.append((iteration, Gtree.nodesQnt(Gtree.root), Gtree.fatherRouteQnt(pointer)))
         while pointer.val[0].scene != p.scene:
             movements.insert(0,pointer.val[1])
             pointer = pointer.father
+        if tick == 'ON':
+            if not os.path.isdir("estatistica"):
+                os.mkdir("estatistica")
+            os.chdir("estatistica")
+            filenum = 0
+            while os.path.isfile("e{0}.txt".format(filenum)):
+                filenum += 1
+            f = open("e{0}.txt".format(filenum), 'w')
+            f.write(str(p.printscene(False)))
+            f.write("\n")
+            if aStar:
+                f.write("Algoritmo: A*\n")
+            else:
+                f.write("Algoritmo: Guloso\n")
+            f.write("Heurística: {0}".format(hFunc.nome))
+            f.write("\nQuantidade de movimentos necessários: {0}\n".format(len(movements)))
+            f.write("\n")
+            for e in estatistic:
+                f.write("tick: {0}\nquantidade de nós: {1}\nnós na rota: {2}\n--------------------------------\n".format(e[0],e[1],e[2])) 
+            f.close()
+            os.chdir("../")
+            self.log.clear()
         return movements
         
 class puzzle(object):
     def __init__(self):
         self.pointer = [2,2] #aponta para a posicao do nulo
         self.scene = [['1','2','3'],['4','5','6'],['7','8','_']]
-    def printscene(self):
-        print("{0}\n\r{1}\n\r{2}\r".format(" ".join(self.scene[0])," ".join(self.scene[1])," ".join(self.scene[2])))
+    def printscene(self, noPrint = True):
+        strPrint = "{0}\n\r{1}\n\r{2}\r".format(" ".join(self.scene[0])," ".join(self.scene[1])," ".join(self.scene[2]))
+        if noPrint:
+            print(strPrint)
+        return strPrint.replace("\r","")
+        
     def move(self, orientation):
         if ((orientation == "KEY_RIGHT") and (self.pointer[1] < 2)):
             aux = self.scene[self.pointer[0]][self.pointer[1]+1] #pega o valor da direita para trocar
