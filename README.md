@@ -1,5 +1,11 @@
 # Puzzle8Pieces
 Puzze 8 peças para a primeira APS de IA
+**QUICK USE!**
+*apague a pasta estatistica, inicie o programa com python3 puzzle.py,
+1. aperte e para gerar um relatorio (demora)
+1. aperte s ou n para armazenar ou não estatistica
+2. aperte i para iniciar o problema ou s para embaralhar o puzzle
+3. divirta-se ou aperte a ou f para resolver o puzzle
 **Alguns comandos**
 * s -> shuffle (embaralha o quebracabeça)
 * i -> Estado Inicial proposto pelo exercicio
